@@ -1,18 +1,37 @@
 # DomoNest
 
-**A production-minded Django + Wagtail household operating system that turns everyday home maintenance into a small set of useful next actions.**
+**A Django + Wagtail household coordination app that connects meal planning, pantry, shopping, recurring chores and practical home knowledge into one daily workflow.**
 
 > **Less to remember. More room to live.**
 
-DomoNest started as a Wagtail StreamField exercise and evolved into a connected portfolio product: meal planning understands Pantry readiness, missing recipe ingredients become Shopping demand, recurring household work advances deterministically, and Today composes the most useful actions without duplicating domain state.
+[**Open the live demo**](https://domonest.onrender.com/) · [Engineering handbook](./docs/00_INDEX.md) · [Deployment runbook](./docs/11_DEPLOYMENT_RUNBOOK.md)
+
+### Demo login
+
+```text
+username: demo
+password: domonest-demo
+```
+
+The demo account is intentionally non-privileged. Its seeded household data can be restored deterministically, so visitors can explore the product without exposing an admin account or real household information.
 
 ![DomoNest Today dashboard](./docs/images/domonest-today.png)
 
-> Screenshot generated from the real Django/Wagtail application with deterministic demo data in Chromium — not a design mockup.
+> The screenshot comes from the real Django/Wagtail application running against deterministic demo data in Chromium.
 
-## Why this project is different
+## The household problem is not another missing checklist
 
-Many portfolio apps stop at independent CRUD screens. DomoNest is built around **cross-domain workflows and explicit invariants**:
+Home organisation usually gets split across unrelated tools: recipes in one place, a shopping list somewhere else, pantry stock in memory, recurring chores in reminders, and useful household knowledge buried in notes.
+
+The friction appears in the gaps between them:
+
+- choosing dinner does not tell you what is missing;
+- noticing low stock does not update the shopping list;
+- a recurring chore can be checked off, but the next occurrence still has to be worked out;
+- a dashboard can become another place where the same state is copied and eventually drifts;
+- private household data and public reference content need very different visibility rules.
+
+DomoNest treats those gaps as the product.
 
 ```text
 Recipe → Pantry readiness → Missing / low ingredients → Shopping
@@ -22,41 +41,61 @@ Routine → Complete / skip / postpone → Next recurrence
 Discover → Public Wagtail knowledge + owner-scoped private household state
 ```
 
-The product goal is simple: **reduce household mental load without making the user maintain another complicated system.**
+The result is not eight disconnected CRUD screens. A change in one part of the household can produce a useful next action somewhere else.
 
-## Product surfaces
+## What you can actually do
 
-| Surface | What it does | Engineering signal |
+| Area | Household job | What DomoNest does |
 | --- | --- | --- |
-| **Today** | Deterministic next-best-action feed | Derived read model; no duplicated dashboard state |
-| **Plan** | One dinner per day with recipe readiness | Date-scoped planning + Pantry-aware reconciliation |
-| **Shopping** | Quick Add, grouping, buy/reopen, Undo, focused Shopping mode | DB invariants, idempotent writes, owner-scoped mutations |
-| **Pantry** | Approximate or precise stock with expiry attention | Low-maintenance domain model + derived attention states |
-| **Home Rhythm** | Recurring household routines | Immutable event history + deterministic recurrence |
-| **Recipes** | Structured editorial recipes | Wagtail Page + snippets + relational ingredients |
-| **Guides** | Actionable household knowledge | Constrained StreamField authoring system |
-| **Discover** | Public knowledge + private household search | Explicit public/private search boundary |
+| **Today** | Decide what needs attention now | Composes a deterministic action feed from current household state rather than storing a second copy of dashboard data |
+| **Plan** | Decide dinner without checking three places | Stores one dinner per day and calculates recipe readiness against Pantry |
+| **Shopping** | Capture what must be bought quickly | Quick Add, grouping, buy/reopen, Undo and focused Shopping mode |
+| **Pantry** | Keep enough stock without inventory micromanagement | Supports approximate or precise stock and derives low/missing/expiry attention states |
+| **Home Rhythm** | Keep recurring work moving | Complete, skip or postpone routines while retaining immutable event history and calculating the next occurrence |
+| **Recipes** | Turn editorial recipes into household actions | Structured Wagtail recipes with relational ingredients and links into Pantry/Shopping |
+| **Guides** | Keep useful household knowledge actionable | Structured Wagtail content instead of an unbounded note dump |
+| **Discover** | Find both public guidance and private household items safely | Searches public Wagtail content and owner-scoped household data without collapsing their privacy boundary |
 
-## Architecture at a glance
+## A five-minute recruiter walkthrough
 
-DomoNest deliberately separates editorial content from private transactional state:
+The live demo is designed to be inspected rather than merely screenshotted.
+
+1. Open **Today** and see how different domains are composed into one view.
+2. Open a recipe and compare its ingredients with current Pantry readiness.
+3. Send missing or low ingredients to **Shopping**.
+4. Plan that recipe for dinner and return to **Today**.
+5. Complete, skip or postpone a **Home Rhythm** routine and inspect how the next occurrence changes.
+6. Use **Discover** to see public knowledge and private household results coexist without sharing the same data boundary.
+
+That path exercises the main product idea: **one household action should be able to inform the next without duplicating state across features.**
+
+## Where the engineering work sits
+
+The interesting parts of DomoNest are mostly in the seams between features:
+
+- recipe ingredients and Pantry items use conservative normalized identity rather than fuzzy matching;
+- readiness is explicit: `AVAILABLE / LOW / MISSING / UNKNOWN`;
+- Recipe/Pantry → Shopping writes are idempotent;
+- owner scoping happens at query time for private household data;
+- Routine history is immutable while the next occurrence is derived;
+- Today and Plan are read models composed from source-of-truth domain state;
+- public Wagtail search stays separate from private household queries;
+- database constraints protect invariants that should survive UI mistakes or retries.
+
+This keeps the product predictable. The application does not need an AI layer to decide whether an ingredient is missing or when a recurring task is due; those answers come from deterministic domain rules.
+
+## Architecture
+
+DomoNest separates editorial content from private transactional state:
 
 - **Wagtail** owns public pages, publishing, snippets and structured authoring.
-- **Django domain models + services** own private household state and write invariants.
+- **Django domain models + services** own household state and write invariants.
 - **Selectors / read models** compose Today, Plan, recipe readiness and Discover.
-- **Views** orchestrate authentication, forms, services and responses.
-- **Templates** render already-understood state; they do not contain business rules.
-- **Database constraints** protect invariants that must survive UI or retry failures.
+- **Views** coordinate authentication, forms, services and responses.
+- **Templates** render already-understood state rather than carrying business rules.
+- **Database constraints** enforce invariants below the request layer.
 
-Key decisions include:
-
-- conservative normalized identity instead of fuzzy/AI matching;
-- explicit `AVAILABLE / LOW / MISSING / UNKNOWN` recipe readiness;
-- idempotent Recipe/Pantry → Shopping writes;
-- owner scoping at query time;
-- immutable Routine event history;
-- public Wagtail search kept separate from private household queries;
-- server-rendered UI with progressive enhancement rather than SPA complexity.
+The UI stays server-rendered with progressive enhancement because most product interactions are form- and workflow-driven. That keeps one authoritative state path through Django instead of introducing a second client-side state model only to mirror the server.
 
 ## Stack
 
@@ -64,7 +103,7 @@ Key decisions include:
 - **Django 5.2.17**
 - **Wagtail 7.4.3**
 - **PostgreSQL** production/integration target
-- SQLite for zero-setup local development
+- SQLite for zero-setup local development and supported fallback environments
 - **Gunicorn**
 - **WhiteNoise** with fingerprinted production static assets
 - Server-rendered HTML + CSS
@@ -72,11 +111,9 @@ Key decisions include:
 - **Axe WCAG 2.2 AA** automated browser checks
 - **Ruff**, Coverage and `pip-audit`
 
-No SPA framework, AI layer or search cluster is added unless a product requirement justifies the operational cost.
-
 ## Quality evidence
 
-CI verifies the repository across multiple layers:
+CI checks the repository at several boundaries rather than relying on one end-to-end happy path:
 
 - Python **3.12 / 3.13 / 3.14**;
 - Ruff lint + formatting;
@@ -95,7 +132,7 @@ CI verifies the repository across multiple layers:
 
 Browser CI publishes Playwright evidence including desktop/mobile screenshots, traces and failure artifacts.
 
-## Run the exact demo locally
+## Run the demo locally
 
 Create a virtual environment, then:
 
@@ -112,65 +149,65 @@ Open:
 http://127.0.0.1:8000/
 ```
 
-Demo account:
+Use the same demo account as the hosted version:
 
 ```text
 username: demo
 password: domonest-demo
 ```
 
-The demo password is intentionally local-only. Do not reuse it for a privileged or real household account.
+The seed command forces this account to remain active, non-staff and non-superuser.
 
-## Deploy on Render
+## Render deployment
 
-The repository now includes a production-aware [Render Blueprint](./render.yaml) for a one-click portfolio deployment:
+**Live portfolio deployment:** [https://domonest.onrender.com/](https://domonest.onrender.com/)
+
+The repository includes [`render.yaml`](./render.yaml) for a reproducible Render topology with a Frankfurt web service and PostgreSQL 17. The production settings also support SQLite when PostgreSQL environment variables are absent, which is useful for lightweight portfolio/fallback deployments.
+
+The Render configuration covers:
 
 - Python 3.13 pinned through `.python-version`;
-- Frankfurt web service + PostgreSQL 17;
-- deploys gated on passing GitHub CI;
-- generated Django secret key;
-- PostgreSQL credentials wired through Render Blueprint references;
-- automatic Render hostname / CSRF / Wagtail admin URL discovery;
-- `/health/` as the deployment health check;
+- generated Django secret key in Blueprint deployments;
+- PostgreSQL credentials wired through Render `fromDatabase` references;
+- automatic Render hostname, CSRF origin and Wagtail admin URL discovery;
+- `/health/` readiness endpoint;
 - production `check --deploy` before process startup;
-- migrations on startup for Render Free, where `preDeployCommand` is unavailable;
-- deterministic public demo reset controlled by environment variables;
+- migrations at startup on Render Free, where `preDeployCommand` is unavailable;
+- deterministic public demo restoration through environment variables;
 - optional S3-compatible media storage for Wagtail uploads.
 
-### Create the portfolio deployment
+### Reproduce the Blueprint deployment
 
-1. Merge the deployment PR to `master`.
-2. In Render, choose **New → Blueprint**.
-3. Select `MykolaDotsenko/domonest`.
-4. Review `render.yaml` and create the resources.
-5. Wait for CI and the Render health check to pass.
+1. Open Render and choose **New → Blueprint**.
+2. Select `MykolaDotsenko/domonest`.
+3. Review `render.yaml`.
+4. Create the web service and PostgreSQL resources.
+5. Wait for the health check to pass.
 
-The Blueprint creates the free preview configuration. The seeded public demo account is deliberately non-privileged:
+The public demo credentials are:
 
 ```text
 username: demo
 password: domonest-demo
 ```
-
-The account is forced to `is_staff=False` and `is_superuser=False` every time the demo seed runs. On the free portfolio configuration, its private demo state is restored on service startup so an abandoned or modified public demo can recover automatically.
 
 ### Verify a deployment
 
-Run the standard-library smoke check against your deployment. `YOUR-SERVICE` is an example hostname; replace it with your actual Render service URL:
+Run the standard-library smoke check:
 
 ```bash
-python scripts/deployment_smoke.py https://YOUR-SERVICE.onrender.com
+python scripts/deployment_smoke.py https://domonest.onrender.com
 ```
 
-It verifies the database-backed health endpoint, root page, no-store health semantics, HTTPS security headers and HSTS.
+It checks the database-aware health endpoint, root page, no-store health semantics, HTTPS security headers and HSTS.
 
 ### Persistent Wagtail media
 
-Render Free has an ephemeral filesystem. The demo seed does not require uploaded media, so the public portfolio experience can run without a media bucket. Before enabling editor uploads, configure shared storage by setting `AWS_STORAGE_BUCKET_NAME` and the matching S3-compatible credentials / endpoint variables from `.env.example`.
+Render Free has an ephemeral filesystem. The seeded portfolio demo does not depend on uploaded media, so it can run without a media bucket.
 
-The production settings then switch Wagtail media and image renditions to `storages.s3.S3Storage`. This supports AWS S3 and compatible providers such as Cloudflare R2 or DigitalOcean Spaces while WhiteNoise remains responsible only for versioned static assets.
+For editor uploads, set `AWS_STORAGE_BUCKET_NAME` and the matching S3-compatible credentials from `.env.example`. Production settings then route Wagtail media and image renditions through `storages.s3.S3Storage`; AWS S3, Cloudflare R2 and DigitalOcean Spaces-compatible endpoints are supported.
 
-For a paid Render service, move database migrations to Render's `preDeployCommand`, set `DOMONEST_RUN_MIGRATIONS_ON_START=false`, disable `DOMONEST_AUTO_SEED_DEMO` for a real household deployment, and use durable media storage.
+For a paid Render service, migrations can move to `preDeployCommand`, `DOMONEST_RUN_MIGRATIONS_ON_START` can be disabled, and `DOMONEST_AUTO_SEED_DEMO` should be turned off for real household use.
 
 See the full [deployment runbook](./docs/11_DEPLOYMENT_RUNBOOK.md).
 
@@ -192,7 +229,7 @@ In another terminal:
 node scripts/capture-readme-screenshot.mjs
 ```
 
-The script writes the real rendered UI to:
+The script writes the rendered UI to:
 
 ```text
 docs/images/domonest-today.png
@@ -216,11 +253,11 @@ Health/readiness endpoint:
 GET /health/
 ```
 
-The included Docker image now honors `PORT`, `WEB_CONCURRENCY`, and `GUNICORN_TIMEOUT` at runtime.
+The included Docker image honors `PORT`, `WEB_CONCURRENCY`, and `GUNICORN_TIMEOUT` at runtime.
 
 ## Engineering handbook
 
-The repository keeps product and engineering decisions explicit instead of hiding them in implementation history.
+The implementation is documented beyond the README so product rationale, architecture and operational decisions can be inspected independently.
 
 Start with **[docs/00_INDEX.md](./docs/00_INDEX.md)**.
 
@@ -236,7 +273,7 @@ Start with **[docs/00_INDEX.md](./docs/00_INDEX.md)**.
 - [Research log](./docs/10_RESEARCH_LOG.md)
 - [Deployment runbook](./docs/11_DEPLOYMENT_RUNBOOK.md)
 
-## Delivery history
+## How the product grew
 
 DomoNest was rebuilt as bounded vertical slices:
 
@@ -254,4 +291,4 @@ DomoNest was rebuilt as bounded vertical slices:
 12. production hardening;
 13. cross-module browser regression scenarios.
 
-Each slice was designed around product value, domain invariants, accessibility and testability rather than feature count.
+Each slice added a usable household capability while preserving domain invariants, accessibility and testability.
