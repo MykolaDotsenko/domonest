@@ -141,7 +141,7 @@ The repository now includes a production-aware [Render Blueprint](./render.yaml)
 
 1. Merge the deployment PR to `master`.
 2. In Render, choose **New → Blueprint**.
-3. Select `MykolaDotsenko/wagtail-StreamField`.
+3. Select `MykolaDotsenko/domonest`.
 4. Review `render.yaml` and create the resources.
 5. Wait for CI and the Render health check to pass.
 
