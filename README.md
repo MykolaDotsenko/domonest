@@ -1,10 +1,10 @@
 # DomoNest
 
-**A Django + Wagtail household coordination app that connects meal planning, pantry, shopping, recurring chores and practical home knowledge into one daily workflow.**
+**Django + Wagtail for the part of home life that usually lives across five different lists.**
 
 > **Less to remember. More room to live.**
 
-[**Open the live demo**](https://domonest.onrender.com/) · [Engineering handbook](./docs/00_INDEX.md) · [Deployment runbook](./docs/11_DEPLOYMENT_RUNBOOK.md)
+[**Live demo**](https://domonest.onrender.com/) · [Engineering notes](./docs/00_INDEX.md) · [Deployment runbook](./docs/11_DEPLOYMENT_RUNBOOK.md)
 
 ### Demo login
 
@@ -13,136 +13,185 @@ username: demo
 password: domonest-demo
 ```
 
-The demo account is intentionally non-privileged. Its seeded household data can be restored deterministically, so visitors can explore the product without exposing an admin account or real household information.
+The demo account is non-staff and non-superuser. It contains seeded household data only.
 
 ![DomoNest Today dashboard](./docs/images/domonest-today.png)
 
-> The screenshot comes from the real Django/Wagtail application running against deterministic demo data in Chromium.
+> Captured from the real application in Chromium with the seeded demo household.
 
-## The household problem is not another missing checklist
+## Why I built it
 
-Home organisation usually gets split across unrelated tools: recipes in one place, a shopping list somewhere else, pantry stock in memory, recurring chores in reminders, and useful household knowledge buried in notes.
+The starting point was a very ordinary annoyance: planning dinner often means opening a recipe, checking the fridge, remembering what is running low, adding missing items to a shopping list, and then remembering the plan again later.
 
-The friction appears in the gaps between them:
+Household software tends to split those steps apart.
 
-- choosing dinner does not tell you what is missing;
-- noticing low stock does not update the shopping list;
-- a recurring chore can be checked off, but the next occurrence still has to be worked out;
-- a dashboard can become another place where the same state is copied and eventually drifts;
-- private household data and public reference content need very different visibility rules.
-
-DomoNest treats those gaps as the product.
+DomoNest connects them.
 
 ```text
-Recipe → Pantry readiness → Missing / low ingredients → Shopping
-Recipe → Plan dinner → Today
-Pantry low stock → Shopping
-Routine → Complete / skip / postpone → Next recurrence
-Discover → Public Wagtail knowledge + owner-scoped private household state
+Recipe
+  ↓
+Pantry readiness
+  ↓
+Missing / low ingredients
+  ↓
+Shopping
+
+Planned dinner ─────────────→ Today
+Low pantry stock ───────────→ Shopping
+Routine event ──────────────→ Next occurrence
+Public guide + private data → Discover
 ```
 
-The result is not eight disconnected CRUD screens. A change in one part of the household can produce a useful next action somewhere else.
+That connection is the product. The individual screens are useful, but the interesting behaviour happens when one household action changes what becomes useful somewhere else.
 
-## What you can actually do
+## Around the house
 
-| Area | Household job | What DomoNest does |
-| --- | --- | --- |
-| **Today** | Decide what needs attention now | Composes a deterministic action feed from current household state rather than storing a second copy of dashboard data |
-| **Plan** | Decide dinner without checking three places | Stores one dinner per day and calculates recipe readiness against Pantry |
-| **Shopping** | Capture what must be bought quickly | Quick Add, grouping, buy/reopen, Undo and focused Shopping mode |
-| **Pantry** | Keep enough stock without inventory micromanagement | Supports approximate or precise stock and derives low/missing/expiry attention states |
-| **Home Rhythm** | Keep recurring work moving | Complete, skip or postpone routines while retaining immutable event history and calculating the next occurrence |
-| **Recipes** | Turn editorial recipes into household actions | Structured Wagtail recipes with relational ingredients and links into Pantry/Shopping |
-| **Guides** | Keep useful household knowledge actionable | Structured Wagtail content instead of an unbounded note dump |
-| **Discover** | Find both public guidance and private household items safely | Searches public Wagtail content and owner-scoped household data without collapsing their privacy boundary |
+### Today
 
-## A five-minute recruiter walkthrough
+Today is not a separate task database. It pulls together useful actions from the current state of dinner plans, routines, shopping and pantry attention.
 
-The live demo is designed to be inspected rather than merely screenshotted.
+There is no second copy of the same household state to keep in sync.
 
-1. Open **Today** and see how different domains are composed into one view.
-2. Open a recipe and compare its ingredients with current Pantry readiness.
-3. Send missing or low ingredients to **Shopping**.
-4. Plan that recipe for dinner and return to **Today**.
-5. Complete, skip or postpone a **Home Rhythm** routine and inspect how the next occurrence changes.
-6. Use **Discover** to see public knowledge and private household results coexist without sharing the same data boundary.
+### Plan
 
-That path exercises the main product idea: **one household action should be able to inform the next without duplicating state across features.**
+Choose one dinner for a date and DomoNest checks the recipe against the Pantry.
 
-## Technical snapshot
+A planned meal can therefore answer two different questions:
 
-**Python 3.12–3.14 · Django 5.2 · Wagtail 7.4 · PostgreSQL · Gunicorn · WhiteNoise · Playwright · Axe**
+- what are we eating?
+- what do we still need?
 
-Three parts are especially worth opening the code for:
+### Shopping
 
-- **Cross-domain consistency.** Recipe readiness, Pantry state, Shopping demand, dinner planning and Today are connected through deterministic selectors and idempotent services instead of copying the same state into multiple features.
-- **Privacy and correctness below the UI.** Private household queries are owner-scoped, public Wagtail search is kept separate, routine history is immutable, and database constraints protect invariants when requests are retried or UI assumptions fail.
-- **Production behaviour is exercised, not just described.** CI covers three Python versions, PostgreSQL integration, migration drift, `check --deploy`, static collection, browser workflows, accessibility and query-budget regressions; the same codebase is deployed on Render.
+Shopping supports fast capture as well as the longer Pantry/Recipe flow:
 
-## Where the engineering work sits
+- Quick Add
+- grouped items
+- buy / reopen
+- Undo
+- focused Shopping mode
+- idempotent additions from Recipe and Pantry actions
 
-The interesting parts of DomoNest are mostly in the seams between features:
+### Pantry
 
-- recipe ingredients and Pantry items use conservative normalized identity rather than fuzzy matching;
-- readiness is explicit: `AVAILABLE / LOW / MISSING / UNKNOWN`;
-- Recipe/Pantry → Shopping writes are idempotent;
-- owner scoping happens at query time for private household data;
-- Routine history is immutable while the next occurrence is derived;
-- Today and Plan are read models composed from source-of-truth domain state;
-- public Wagtail search stays separate from private household queries;
-- database constraints protect invariants that should survive UI mistakes or retries.
+Pantry does not force a warehouse-style inventory model onto a kitchen.
 
-This keeps the product predictable. The application does not need an AI layer to decide whether an ingredient is missing or when a recurring task is due; those answers come from deterministic domain rules.
+An item can be tracked approximately or precisely, while DomoNest still derives whether it is:
 
-## Architecture
+`AVAILABLE` · `LOW` · `MISSING` · `UNKNOWN`
 
-DomoNest separates editorial content from private transactional state:
+Expiry attention is derived from the stored item rather than maintained as another flag.
 
-- **Wagtail** owns public pages, publishing, snippets and structured authoring.
-- **Django domain models + services** own household state and write invariants.
-- **Selectors / read models** compose Today, Plan, recipe readiness and Discover.
-- **Views** coordinate authentication, forms, services and responses.
-- **Templates** render already-understood state rather than carrying business rules.
-- **Database constraints** enforce invariants below the request layer.
+### Home Rhythm
 
-The UI stays server-rendered with progressive enhancement because most product interactions are form- and workflow-driven. That keeps one authoritative state path through Django instead of introducing a second client-side state model only to mirror the server.
+Recurring household jobs keep an event history.
+
+Completing, skipping or postponing a routine records what happened and derives the next occurrence from that history. Previous events are not rewritten to make the current schedule look tidy.
+
+### Recipes and Guides
+
+Wagtail handles the editorial side of the product:
+
+- structured recipes
+- relational ingredients
+- practical household guides
+- publishing workflow
+- reusable snippets
+
+Recipes are not isolated content pages: their ingredients can participate in Pantry readiness and Shopping.
+
+### Discover
+
+Discover has to search two very different kinds of information:
+
+- public Wagtail content;
+- private, owner-scoped household data.
+
+Those queries stay separate. A convenient search box is not a reason to blur the privacy boundary.
+
+## A useful path through the demo
+
+If you have a few minutes, this route shows most of the product logic without needing admin access:
+
+1. Start on **Today**.
+2. Open a recipe and inspect its Pantry readiness.
+3. Add missing or low ingredients to **Shopping**.
+4. Plan the recipe for dinner.
+5. Return to **Today** and see the planned meal appear in context.
+6. Open **Home Rhythm**, complete or postpone a routine, and see its next occurrence change.
+7. Try **Discover** to see public content and household results handled side by side.
+
+## The rules I did not want the UI to be able to break
+
+A large part of the work is deliberately below the template layer.
+
+- Recipe ingredients and Pantry items use conservative normalized identity instead of fuzzy matching.
+- Recipe/Pantry → Shopping writes are idempotent.
+- Private household queries are owner-scoped at query time.
+- Routine events are immutable.
+- Today and Plan are composed from source-of-truth domain state.
+- Database constraints backstop invariants that should survive retries and duplicate submissions.
+- Public Wagtail search never becomes a shortcut around private-data scoping.
+
+The calculations are deterministic. DomoNest does not ask an AI model whether milk is missing or when a weekly routine is due.
+
+## Code shape
+
+```text
+Wagtail
+  public pages · recipes · guides · snippets
+        │
+        ├──────────────┐
+        │              │
+Django domain      selectors / read models
+  pantry              Today
+  shopping            Plan
+  routines            readiness
+  meal plans           Discover
+        │              │
+        └──── services ┘
+               │
+            views
+               │
+           templates
+```
+
+Views coordinate requests; services own writes; selectors assemble read models; templates receive state that has already been interpreted.
+
+The UI is server-rendered with progressive enhancement. Most interactions are household workflows backed by Django forms and domain services, so adding a second client-side state system would mostly duplicate the server's job.
 
 ## Stack
 
-- **Python 3.12–3.14**
-- **Django 5.2.17**
-- **Wagtail 7.4.3**
-- **PostgreSQL** production/integration target
-- SQLite for zero-setup local development and supported fallback environments
-- **Gunicorn**
-- **WhiteNoise** with fingerprinted production static assets
-- Server-rendered HTML + CSS
-- **Playwright + Chromium**
-- **Axe WCAG 2.2 AA** automated browser checks
-- **Ruff**, Coverage and `pip-audit`
+**Python 3.12–3.14 · Django 5.2.17 · Wagtail 7.4.3 · PostgreSQL · Gunicorn · WhiteNoise · Playwright · Axe**
 
-## Quality evidence
+Supporting pieces:
 
-CI checks the repository at several boundaries rather than relying on one end-to-end happy path:
+- SQLite for zero-setup local development and fallback deployments
+- server-rendered HTML + CSS
+- Ruff
+- Coverage
+- `pip-audit`
+- Chromium browser tests
 
-- Python **3.12 / 3.13 / 3.14**;
-- Ruff lint + formatting;
+## How I check it
+
+The test suite is split around the kinds of failures I actually care about here:
+
+- domain and service tests for household rules;
+- PostgreSQL integration coverage;
+- migration-drift checks;
 - Django/Wagtail system checks;
-- migration drift;
-- clean database migrations;
-- branch coverage threshold;
-- full PostgreSQL integration suite;
 - production `check --deploy`;
 - production `collectstatic`;
-- Python dependency audit;
-- Chromium golden journey;
-- Axe accessibility checks;
-- cross-module workflow regression scenarios;
-- query-budget regressions for high-value read models.
+- Chromium user journeys;
+- Axe WCAG 2.2 AA checks;
+- cross-module regressions such as Recipe → Pantry → Shopping;
+- query budgets around expensive read models;
+- Python 3.12, 3.13 and 3.14 in CI.
 
-Browser CI publishes Playwright evidence including desktop/mobile screenshots, traces and failure artifacts.
+Playwright artifacts include desktop/mobile screenshots, traces and failure evidence.
 
-## Run the demo locally
+## Run it locally
 
 Create a virtual environment, then:
 
@@ -159,71 +208,58 @@ Open:
 http://127.0.0.1:8000/
 ```
 
-Use the same demo account as the hosted version:
+Login:
 
 ```text
 username: demo
 password: domonest-demo
 ```
 
-The seed command forces this account to remain active, non-staff and non-superuser.
+The seed command always keeps that user active, non-staff and non-superuser.
 
-## Render deployment
+## Live deployment
 
-**Live portfolio deployment:** [https://domonest.onrender.com/](https://domonest.onrender.com/)
+**https://domonest.onrender.com/**
 
-The repository includes [`render.yaml`](./render.yaml) for a reproducible Render topology with a Frankfurt web service and PostgreSQL 17. The production settings also support SQLite when PostgreSQL environment variables are absent, which is useful for lightweight portfolio/fallback deployments.
+The repository contains [`render.yaml`](./render.yaml) for Render and production settings for both PostgreSQL-backed and lightweight fallback deployments.
 
-The Render configuration covers:
+The Blueprint describes:
 
-- Python 3.13 pinned through `.python-version`;
-- generated Django secret key in Blueprint deployments;
-- PostgreSQL credentials wired through Render `fromDatabase` references;
-- automatic Render hostname, CSRF origin and Wagtail admin URL discovery;
-- `/health/` readiness endpoint;
-- production `check --deploy` before process startup;
-- migrations at startup on Render Free, where `preDeployCommand` is unavailable;
-- deterministic public demo restoration through environment variables;
-- optional S3-compatible media storage for Wagtail uploads.
+- Frankfurt web service
+- PostgreSQL 17
+- Python 3.13 via `.python-version`
+- generated Django secret
+- database values through Render `fromDatabase`
+- automatic Render hostname / CSRF / Wagtail admin URL handling
+- `/health/` readiness endpoint
+- `check --deploy` before startup
+- migrations on startup for the free Render setup
+- deterministic demo restoration
+- optional S3-compatible Wagtail media storage
 
-### Reproduce the Blueprint deployment
+To create the Blueprint stack in Render:
 
-1. Open Render and choose **New → Blueprint**.
+1. Choose **New → Blueprint**.
 2. Select `MykolaDotsenko/domonest`.
 3. Review `render.yaml`.
-4. Create the web service and PostgreSQL resources.
-5. Wait for the health check to pass.
+4. Create the resources.
+5. Wait for the service health check.
 
-The public demo credentials are:
-
-```text
-username: demo
-password: domonest-demo
-```
-
-### Verify a deployment
-
-Run the standard-library smoke check:
+Smoke-test a deployment with:
 
 ```bash
 python scripts/deployment_smoke.py https://domonest.onrender.com
 ```
 
-It checks the database-aware health endpoint, root page, no-store health semantics, HTTPS security headers and HSTS.
+The script checks the health endpoint, root page, cache behaviour, HTTPS security headers and HSTS.
 
-### Persistent Wagtail media
+### Media on Render
 
-Render Free has an ephemeral filesystem. The seeded portfolio demo does not depend on uploaded media, so it can run without a media bucket.
+The seeded demo does not depend on uploaded files, so the free portfolio deployment can run without durable media storage.
 
-For editor uploads, set `AWS_STORAGE_BUCKET_NAME` and the matching S3-compatible credentials from `.env.example`. Production settings then route Wagtail media and image renditions through `storages.s3.S3Storage`; AWS S3, Cloudflare R2 and DigitalOcean Spaces-compatible endpoints are supported.
+For editor uploads, configure `AWS_STORAGE_BUCKET_NAME` plus the S3-compatible settings documented in `.env.example`. Wagtail media and renditions then use `storages.s3.S3Storage`; WhiteNoise continues to serve versioned static assets.
 
-For a paid Render service, migrations can move to `preDeployCommand`, `DOMONEST_RUN_MIGRATIONS_ON_START` can be disabled, and `DOMONEST_AUTO_SEED_DEMO` should be turned off for real household use.
-
-See the full [deployment runbook](./docs/11_DEPLOYMENT_RUNBOOK.md).
-
-### Re-render the README screenshot
-
-After installing browser dependencies:
+## Re-capture the README image
 
 ```bash
 npm install --no-audit --no-fund
@@ -233,21 +269,21 @@ python manage.py seed_demo --reset --username demo --password domonest-demo
 python manage.py runserver 127.0.0.1:8000 --noreload
 ```
 
-In another terminal:
+Then, in another terminal:
 
 ```bash
 node scripts/capture-readme-screenshot.mjs
 ```
 
-The script writes the rendered UI to:
+Output:
 
 ```text
 docs/images/domonest-today.png
 ```
 
-## Production baseline
+## Production outside Render
 
-For non-Render environments, copy `.env.example`, use `mysite.settings.production`, configure PostgreSQL and durable media storage, then run:
+Copy `.env.example`, use `mysite.settings.production`, configure PostgreSQL and durable media storage, then run:
 
 ```bash
 python -m pip install -r requirements.txt
@@ -257,19 +293,17 @@ python manage.py collectstatic --noinput
 gunicorn mysite.wsgi:application --bind 0.0.0.0:${PORT:-8000}
 ```
 
-Health/readiness endpoint:
+Readiness:
 
 ```text
 GET /health/
 ```
 
-The included Docker image honors `PORT`, `WEB_CONCURRENCY`, and `GUNICORN_TIMEOUT` at runtime.
+The Docker image honors `PORT`, `WEB_CONCURRENCY` and `GUNICORN_TIMEOUT`.
 
-## Engineering handbook
+## Notes behind the code
 
-The implementation is documented beyond the README so product rationale, architecture and operational decisions can be inspected independently.
-
-Start with **[docs/00_INDEX.md](./docs/00_INDEX.md)**.
+The README is the tour; the deeper reasoning lives in `docs/`.
 
 - [Product specification](./docs/01_PRODUCT_SPEC.md)
 - [UX research and flows](./docs/02_UX_RESEARCH_AND_FLOWS.md)
@@ -283,22 +317,23 @@ Start with **[docs/00_INDEX.md](./docs/00_INDEX.md)**.
 - [Research log](./docs/10_RESEARCH_LOG.md)
 - [Deployment runbook](./docs/11_DEPLOYMENT_RUNBOOK.md)
 
-## How the product grew
+## Build history
 
-DomoNest was rebuilt as bounded vertical slices:
+DomoNest grew one connected household workflow at a time:
 
-1. foundation + CI;
-2. design system + app shell;
-3. Shopping;
-4. Pantry;
-5. recurring Home Rhythm;
-6. Today orchestration;
-7. Wagtail content architecture;
-8. Recipe domain;
-9. Recipe → Pantry → Shopping;
-10. dinner planning;
-11. privacy-safe Discover/search;
-12. production hardening;
-13. cross-module browser regression scenarios.
+```text
+foundation
+→ Shopping
+→ Pantry
+→ Home Rhythm
+→ Today
+→ Wagtail content
+→ Recipes
+→ Recipe / Pantry / Shopping link
+→ dinner planning
+→ Discover
+→ production hardening
+→ cross-module browser coverage
+```
 
-Each slice added a usable household capability while preserving domain invariants, accessibility and testability.
+That sequence mirrors the product itself: get one household loop working, then connect the next one.
