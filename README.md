@@ -156,7 +156,7 @@ The account is forced to `is_staff=False` and `is_superuser=False` every time th
 
 ### Verify a deployment
 
-Run the standard-library smoke check against the live URL:
+Run the standard-library smoke check against your deployment. `YOUR-SERVICE` is an example hostname; replace it with your actual Render service URL:
 
 ```bash
 python scripts/deployment_smoke.py https://YOUR-SERVICE.onrender.com
