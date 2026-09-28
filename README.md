@@ -69,6 +69,16 @@ The live demo is designed to be inspected rather than merely screenshotted.
 
 That path exercises the main product idea: **one household action should be able to inform the next without duplicating state across features.**
 
+## Technical snapshot
+
+**Python 3.12–3.14 · Django 5.2 · Wagtail 7.4 · PostgreSQL · Gunicorn · WhiteNoise · Playwright · Axe**
+
+Three parts are especially worth opening the code for:
+
+- **Cross-domain consistency.** Recipe readiness, Pantry state, Shopping demand, dinner planning and Today are connected through deterministic selectors and idempotent services instead of copying the same state into multiple features.
+- **Privacy and correctness below the UI.** Private household queries are owner-scoped, public Wagtail search is kept separate, routine history is immutable, and database constraints protect invariants when requests are retried or UI assumptions fail.
+- **Production behaviour is exercised, not just described.** CI covers three Python versions, PostgreSQL integration, migration drift, `check --deploy`, static collection, browser workflows, accessibility and query-budget regressions; the same codebase is deployed on Render.
+
 ## Where the engineering work sits
 
 The interesting parts of DomoNest are mostly in the seams between features:
