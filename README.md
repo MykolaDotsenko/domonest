@@ -1,8 +1,6 @@
 # DomoNest
 
-**Django + Wagtail for the part of home life that usually lives across five different lists.**
-
-> **Less to remember. More room to live.**
+DomoNest is a Django + Wagtail app for keeping meal plans, pantry stock, shopping, recurring household jobs and practical home notes in one place.
 
 [**Live demo**](https://domonest.onrender.com/) · [Engineering notes](./docs/00_INDEX.md) · [Deployment runbook](./docs/11_DEPLOYMENT_RUNBOOK.md)
 
@@ -21,11 +19,9 @@ The demo account is non-staff and non-superuser. It contains seeded household da
 
 ## Why I built it
 
-The starting point was a very ordinary annoyance: planning dinner often means opening a recipe, checking the fridge, remembering what is running low, adding missing items to a shopping list, and then remembering the plan again later.
+I started with a simple problem: planning dinner often means opening a recipe, checking the fridge, remembering what is running low, adding missing items to a shopping list, and then remembering the plan again later.
 
-Household software tends to split those steps apart.
-
-DomoNest connects them.
+Those steps are usually handled in separate places. I wanted them to share the same household state.
 
 ```text
 Recipe
@@ -42,7 +38,7 @@ Routine event ──────────────→ Next occurrence
 Public guide + private data → Discover
 ```
 
-That connection is the product. The individual screens are useful, but the interesting behaviour happens when one household action changes what becomes useful somewhere else.
+The screens are useful on their own, but the main idea is that a change in one place can affect what appears somewhere else.
 
 ## Around the house
 
@@ -111,7 +107,7 @@ Those queries stay separate. A convenient search box is not a reason to blur the
 
 ## A useful path through the demo
 
-If you have a few minutes, this route shows most of the product logic without needing admin access:
+This route covers most of the app without needing admin access:
 
 1. Start on **Today**.
 2. Open a recipe and inspect its Pantry readiness.
@@ -123,7 +119,7 @@ If you have a few minutes, this route shows most of the product logic without ne
 
 ## The rules I did not want the UI to be able to break
 
-A large part of the work is deliberately below the template layer.
+Most of these rules live below the template layer.
 
 - Recipe ingredients and Pantry items use conservative normalized identity instead of fuzzy matching.
 - Recipe/Pantry → Shopping writes are idempotent.
@@ -133,7 +129,7 @@ A large part of the work is deliberately below the template layer.
 - Database constraints backstop invariants that should survive retries and duplicate submissions.
 - Public Wagtail search never becomes a shortcut around private-data scoping.
 
-The calculations are deterministic. DomoNest does not ask an AI model whether milk is missing or when a weekly routine is due.
+These calculations are deterministic. Whether milk is missing or when a weekly routine is due comes from application rules, not an AI model.
 
 ## Code shape
 
@@ -158,7 +154,7 @@ Django domain      selectors / read models
 
 Views coordinate requests; services own writes; selectors assemble read models; templates receive state that has already been interpreted.
 
-The UI is server-rendered with progressive enhancement. Most interactions are household workflows backed by Django forms and domain services, so adding a second client-side state system would mostly duplicate the server's job.
+The UI is server-rendered with progressive enhancement. Most interactions already map cleanly to Django forms and domain services, so a separate client-side state layer would duplicate state without solving a current problem.
 
 ## Stack
 
@@ -175,7 +171,7 @@ Supporting pieces:
 
 ## How I check it
 
-The test suite is split around the kinds of failures I actually care about here:
+The test suite is organised around the failures that matter for this app:
 
 - domain and service tests for household rules;
 - PostgreSQL integration coverage;
@@ -303,7 +299,7 @@ The Docker image honors `PORT`, `WEB_CONCURRENCY` and `GUNICORN_TIMEOUT`.
 
 ## Notes behind the code
 
-The README is the tour; the deeper reasoning lives in `docs/`.
+More detailed product, architecture and deployment notes are in `docs/`.
 
 - [Product specification](./docs/01_PRODUCT_SPEC.md)
 - [UX research and flows](./docs/02_UX_RESEARCH_AND_FLOWS.md)
@@ -319,7 +315,7 @@ The README is the tour; the deeper reasoning lives in `docs/`.
 
 ## Build history
 
-DomoNest grew one connected household workflow at a time:
+I built DomoNest one household workflow at a time:
 
 ```text
 foundation
@@ -336,4 +332,4 @@ foundation
 → cross-module browser coverage
 ```
 
-That sequence mirrors the product itself: get one household loop working, then connect the next one.
+I used that order because each new workflow depended on behaviour that was already working in the previous one.
