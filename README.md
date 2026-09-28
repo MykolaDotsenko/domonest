@@ -251,7 +251,7 @@ The script checks the health endpoint, root page, cache behaviour, HTTPS securit
 
 ### Media on Render
 
-The seeded demo does not depend on uploaded files, so the free portfolio deployment can run without durable media storage.
+The seeded demo does not depend on uploaded files, so the free hosted demo can run without durable media storage.
 
 For editor uploads, configure `AWS_STORAGE_BUCKET_NAME` plus the S3-compatible settings documented in `.env.example`. Wagtail media and renditions then use `storages.s3.S3Storage`; WhiteNoise continues to serve versioned static assets.
 
